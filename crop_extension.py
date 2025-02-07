@@ -1,12 +1,34 @@
 import os, sys
 from PIL import Image 
 import random
+from typing import Tuple
 
-def random_crop_containing_bbox(image, bbox, crop_size=(512,512)):
+def random_crop_containing_bbox(image, bbox: Tuple[int, int, int, int], crop_size=(512, 512)):
     """
     Randomly crops an image such that the bounding box is fully contained within the crop.
+    
+    Args:
+        image: PIL Image object
+        bbox: Tuple of (x, y, width, height) defining the bounding box
+        crop_size: Tuple of (width, height) for the desired crop size
+        
+    Returns:
+        PIL Image object containing the cropped image
+        
+    Raises:
+        ValueError: If the bounding box is outside image bounds or crop size is invalid
     """
+    if image is None:
+        raise ValueError("Image cannot be None")
+        
+    if not isinstance(crop_size, tuple) or len(crop_size) != 2:
+        raise ValueError("crop_size must be a tuple of length 2")
+        
+    if crop_size[0] <= 0 or crop_size[1] <= 0:
+        raise ValueError("crop_size dimensions must be positive")
+    
     width, height = image.size
+    
     # Convert bbox from [x,y,w,h] to [x1,y1,x2,y2]
     x, y, w, h = bbox
     bbox_x1, bbox_y1, bbox_x2, bbox_y2 = x, y, x + w, y + h
@@ -14,33 +36,29 @@ def random_crop_containing_bbox(image, bbox, crop_size=(512,512)):
     # Ensure the bounding box is within the image dimensions
     if (bbox_x1 < 0 or bbox_y1 < 0 or bbox_x2 > width or bbox_y2 > height):
         raise ValueError("Bounding box is out of image bounds")
+        
+    # Ensure crop size is large enough to contain bbox
+    if w > crop_size[0] or h > crop_size[1]:
+        raise ValueError("Crop size is smaller than bounding box")
 
-    # Calculate the maximum x and y coordinates for the top-left corner of the crop
-    max_x = min(bbox_x1, width - crop_size[0])
-    max_y = min(bbox_y1, height - crop_size[1])
+    # Calculate valid range for crop's top-left corner
+    min_x = max(0, bbox_x2 - crop_size[0])
+    max_x = min(width - crop_size[0], bbox_x1)
+    min_y = max(0, bbox_y2 - crop_size[1])
+    max_y = min(height - crop_size[1], bbox_y1)
 
-    # Ensure the crop size does not exceed image dimensions
-    if max_x <= 0 or max_y <= 0:
-        raise ValueError("Crop size is larger than image dimensions")
+    # Check if valid crop region exists
+    if min_x > max_x or min_y > max_y:
+        raise ValueError("No valid crop region exists that contains the bounding box")
 
     # Randomly select a top-left corner for the crop
-    x = random.randint(0, max_x)
-    y = random.randint(0, max_y)
-
-    # Adjust the crop to ensure it contains the bounding box
-    x = max(x, bbox_x1)
-    y = max(y, bbox_y1)
-
-    # Ensure the crop does not exceed image dimensions
-    if x + crop_size[0] > width:
-        x = width - crop_size[0]
-    if y + crop_size[1] > height:
-        y = height - crop_size[1]
+    x = random.randint(min_x, max_x) if min_x < max_x else min_x
+    y = random.randint(min_y, max_y) if min_y < max_y else min_y
 
     # Crop the image
     cropped_image = image.crop((x, y, x + crop_size[0], y + crop_size[1]))
 
-    return cropped_image
+    return cropped_image, (x, y)
 
 
 def crop_to_grid(image, tile_size=(512, 512)):
